@@ -115,8 +115,8 @@ def main():
     try:
         db_utils.init_connection_pool()
         #setup_patterns()
-        search_and_log_patterns(genome_id_to_search=1)
-        compare_and_log_mutations(ref_genome_id=1, comp_genome_id=2)
+        search_and_log_patterns(genome_id_to_search=3)
+        compare_and_log_mutations(ref_genome_id=1, comp_genome_id=3)
 
         print("\n--- Analysis Pipeline Finished ---")
         print("You can now view the results in your Supabase dashboard.")
