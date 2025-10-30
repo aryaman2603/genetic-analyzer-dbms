@@ -107,9 +107,12 @@ if tool_choice == "Pattern Search":
 elif tool_choice == "Variation Comparison":
     st.header("🔄 Variation Comparison Tool")
     
-    # Use Streamlit's session state to hold the results temporarily
+    # Use Streamlit's session state to hold all persistent data
     if 'variations' not in st.session_state:
         st.session_state.variations = None
+        st.session_state.ref_seq_len = 0
+        st.session_state.comp_seq_len = 0
+        st.session_state.comp_genome_id_to_log = None
 
     genome_list = load_genome_list()
     col1, col2 = st.columns(2)
@@ -131,8 +134,14 @@ elif tool_choice == "Variation Comparison":
                         ref_sequence = cur.fetchone()[0]
                         cur.execute("SELECT sequence FROM genomes WHERE genome_id = %s;", (comp_genome_id,))
                         comp_sequence = cur.fetchone()[0]
-                    # Store results in session state to use later
+                    
+                    # Store results AND other needed data in session state
                     st.session_state.variations = analysis_functions.detect_mutations_simple(ref_sequence, comp_sequence)
+                    # *** FIX 1: Save the lengths and ID to session state ***
+                    st.session_state.ref_seq_len = len(ref_sequence)
+                    st.session_state.comp_seq_len = len(comp_sequence)
+                    st.session_state.comp_genome_id_to_log = comp_genome_id
+
                 except Exception as e:
                     st.error(f"An error occurred during comparison: {e}")
                 finally:
@@ -143,7 +152,9 @@ elif tool_choice == "Variation Comparison":
         variations = st.session_state.variations
         st.success(f"Comparison complete! Found {len(variations)} variations.")
         
-        seq_len = min(len(ref_sequence), len(comp_sequence))
+        # *** FIX 2: Use the saved lengths from session state ***
+        seq_len = min(st.session_state.ref_seq_len, st.session_state.comp_seq_len)
+        
         variation_rate = (len(variations) / seq_len) * 100 if seq_len > 0 else 0
         st.metric(label="Variation Rate", value=f"{variation_rate:.2f}%")
 
@@ -152,17 +163,17 @@ elif tool_choice == "Variation Comparison":
             df = pd.DataFrame(variations)
             st.dataframe(df.head(100))
 
-            # *** THE NEW FEATURE ***
             st.markdown("---")
             if st.button("Log these variations to the database"):
                 with st.spinner(f"Logging {len(variations)} variations using high-performance batch insert..."):
                     conn = db_utils.get_connection()
                     try:
                         with conn.cursor() as cur:
+                            # *** FIX 3: Use the saved ID from session state ***
+                            comp_genome_id = st.session_state.comp_genome_id_to_log
                             mutations_to_log = [(comp_genome_id, v['type'], v['position'], v['original'], v['mutated']) for v in variations]
                             sql_template = "INSERT INTO mutations (genome_id, mutation_type, position, original_sequence, mutated_sequence) VALUES (%s, %s, %s, %s, %s)"
                             
-                            # Using the same efficient batch method
                             execute_batch(cur, sql_template, mutations_to_log)
                             
                             conn.commit()
@@ -175,16 +186,4 @@ elif tool_choice == "Variation Comparison":
                         db_utils.release_connection(conn)
 
 
-
-
-'''### How to Run Your New UI
-
-1.  **Save the File:** Make sure the code above is saved as `app.py` in your project's root directory (the same place as your other scripts).
-
-2.  **Open Your Terminal:** Make sure your virtual environment (`venv`) is activated.
-
-3.  **Run the App:** Execute the following command:
-
-    bash
-    streamlit run app.py'''
     
